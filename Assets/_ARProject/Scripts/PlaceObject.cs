@@ -6,17 +6,22 @@ using UnityEngine.XR.ARSubsystems;
 using EnhancedTouch = UnityEngine.InputSystem.EnhancedTouch;
 
 namespace _ARProject.Scripts {
-    [RequireComponent(typeof(ARRaycastManager), typeof(ARPlaneManager))]
+    [RequireComponent(typeof(ARRaycastManager),
+        typeof(ARPlaneManager),
+        typeof(ARAnchorManager))]
     public class PlaceObject : MonoBehaviour {
         [SerializeField] private GameObject prefab;
 
         private ARRaycastManager _arRaycastManager;
         private ARPlaneManager _arPlaneManager;
+        private ARAnchorManager _arAnchorManager;
+        
         private readonly List<ARRaycastHit> _hits = new();
 
         private void Awake() {
             _arRaycastManager = GetComponent<ARRaycastManager>();
             _arPlaneManager = GetComponent<ARPlaneManager>();
+            _arAnchorManager = GetComponent<ARAnchorManager>();
         }
 
 #if !UNITY_EDITOR
@@ -52,20 +57,26 @@ namespace _ARProject.Scripts {
         private void TryPlaceObject(Vector2 screenPosition) {
             if (!_arRaycastManager.Raycast(screenPosition, _hits, TrackableType.PlaneWithinPolygon))
                 return;
-
+            
             ARRaycastHit hit = _hits[0];
-            Pose pose = hit.pose;
-            GameObject obj = Instantiate(prefab, pose.position, pose.rotation);
             ARPlane plane = _arPlaneManager.GetPlane(hit.trackableId);
+            
+            if (plane == null)
+                return;
 
-            if (plane != null && plane.alignment == PlaneAlignment.HorizontalUp) {
-                Vector3 direction = Camera.main.transform.position - obj.transform.position;
-                direction.y = 0f;
-                
-                if (direction.sqrMagnitude > 0.001f) {
-                    obj.transform.rotation = Quaternion.LookRotation(direction);
-                }
-            }
+            ARAnchor anchor = _arAnchorManager.AttachAnchor(plane, hit.pose);
+
+            if (anchor == null)
+                return;
+
+            GameObject obj = Instantiate(prefab, anchor.transform);
+            obj.transform.localPosition = Vector3.zero;
+            obj.transform.localRotation = Quaternion.identity;
+            Vector3 dir = Camera.main.transform.position - anchor.transform.position;
+            dir.y = 0f;
+
+            if (dir.sqrMagnitude > 0.001f)
+                obj.transform.rotation = Quaternion.LookRotation(dir);
         }
     }
 }
