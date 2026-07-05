@@ -15,27 +15,34 @@ namespace _ARProject.Scripts {
         private ARRaycastManager _arRaycastManager;
         private ARPlaneManager _arPlaneManager;
         private ARAnchorManager _arAnchorManager;
-        
+
         private readonly List<ARRaycastHit> _hits = new();
 
-        private void Awake() {
+        private GameObject _placedObject;
+        private ARAnchor _currentAnchor;
+
+        private void Awake()
+        {
             _arRaycastManager = GetComponent<ARRaycastManager>();
             _arPlaneManager = GetComponent<ARPlaneManager>();
             _arAnchorManager = GetComponent<ARAnchorManager>();
         }
 
 #if !UNITY_EDITOR
-        private void OnEnable() {
+        private void OnEnable()
+        {
             EnhancedTouch.EnhancedTouchSupport.Enable();
             EnhancedTouch.Touch.onFingerDown += FingerDown;
         }
 
-        private void OnDisable() {
+        private void OnDisable()
+        {
             EnhancedTouch.Touch.onFingerDown -= FingerDown;
             EnhancedTouch.EnhancedTouchSupport.Disable();
         }
 
-        private void FingerDown(EnhancedTouch.Finger finger) {
+        private void FingerDown(EnhancedTouch.Finger finger)
+        {
             if (finger.index != 0)
                 return;
 
@@ -44,39 +51,54 @@ namespace _ARProject.Scripts {
 #endif
 
 #if UNITY_EDITOR
-        private void Update() {
-            if (Mouse.current == null)
-                return;
-
-            if (Mouse.current.leftButton.wasPressedThisFrame) {
+        private void Update()
+        {
+            if (Mouse.current != null &&
+                Mouse.current.leftButton.wasPressedThisFrame)
+            {
                 TryPlaceObject(Mouse.current.position.ReadValue());
             }
         }
 #endif
 
-        private void TryPlaceObject(Vector2 screenPosition) {
+        private void TryPlaceObject(Vector2 screenPosition)
+        {
             if (!_arRaycastManager.Raycast(screenPosition, _hits, TrackableType.PlaneWithinPolygon))
                 return;
-            
+
             ARRaycastHit hit = _hits[0];
             ARPlane plane = _arPlaneManager.GetPlane(hit.trackableId);
-            
+
             if (plane == null)
                 return;
 
-            ARAnchor anchor = _arAnchorManager.AttachAnchor(plane, hit.pose);
+            if (_currentAnchor != null)
+                Destroy(_currentAnchor.gameObject);
 
-            if (anchor == null)
+            _currentAnchor = _arAnchorManager.AttachAnchor(plane, hit.pose);
+
+            if (_currentAnchor == null)
                 return;
 
-            GameObject obj = Instantiate(prefab, anchor.transform);
-            obj.transform.localPosition = Vector3.zero;
-            obj.transform.localRotation = Quaternion.identity;
-            Vector3 dir = Camera.main.transform.position - anchor.transform.position;
-            dir.y = 0f;
+            if (_placedObject == null)
+            {
+                _placedObject = Instantiate(prefab, _currentAnchor.transform);
+            }
+            else
+            {
+                _placedObject.transform.SetParent(_currentAnchor.transform, false);
+            }
 
-            if (dir.sqrMagnitude > 0.001f)
-                obj.transform.rotation = Quaternion.LookRotation(dir);
+            _placedObject.transform.localPosition = Vector3.zero;
+            _placedObject.transform.localRotation = Quaternion.identity;
+
+            Vector3 direction = Camera.main.transform.position - _currentAnchor.transform.position;
+            direction.y = 0f;
+
+            if (direction.sqrMagnitude > 0.001f)
+            {
+                _placedObject.transform.rotation = Quaternion.LookRotation(direction);
+            }
         }
     }
 }
